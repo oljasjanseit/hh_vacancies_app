@@ -8,8 +8,10 @@ st.set_page_config(page_title="HH Vacancies", layout="wide")
 st.title("Поиск вакансий на HH")
 
 # --- Настройки ---
-keywords_input = st.text_area("Ключевые слова (через запятую)", 
-                              "продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер")
+keywords_input = st.text_area(
+    "Ключевые слова (через запятую)", 
+    "продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
+)
 exclude_input = st.text_area("Исключить слова (через запятую)", "БАДы,рецепт,здравоохран")
 keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
 exclude_keywords = [e.strip() for e in exclude_input.split(",") if e.strip()]
@@ -68,8 +70,8 @@ if st.button("Начать поиск"):
         df.sort_values('published_date', ascending=False, inplace=True)
 
         # --- Генерация HTML таблицы ---
-        table_html = "<table style='border-collapse: collapse; width: 100%; color: black;'>"
-        table_html += "<tr style='background-color:#f2f2f2; color: black;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
+        table_html = "<table style='border-collapse: collapse; width: 100%;'>"
+        table_html += "<tr style='background-color:#f2f2f2;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
 
         for _, row in df.iterrows():
             salary_text = f"{row['salary_from']} - {row['salary_to']} {row['currency']}" if row['salary_from'] != "-" else "-"
@@ -80,7 +82,7 @@ if st.button("Начать поиск"):
             else:
                 address_link = "-"
 
-            table_html += f"<tr style='color:black; padding:5px;'>"
+            table_html += f"<tr style='padding:5px;'>"
             table_html += f"<td>{vacancy_link}</td>"
             table_html += f"<td>{row['company']}</td>"
             table_html += f"<td>{row['keyword']}</td>"
