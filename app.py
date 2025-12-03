@@ -2,126 +2,112 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
+import io
 
-st.set_page_config(page_title="Вакансии HH", layout="wide")
-st.title("Сбор вакансий с HH.kz")
+st.set_page_config(page_title="HH Vacancies App", layout="wide")
 
-# --- Настройки поиска через интерфейс ---
+st.title("HH Vacancies Scraper")
+
+# Ввод ключевых слов
 keywords_input = st.text_area(
-    "Ключевые слова для поиска (через запятую)",
+    "Введите ключевые слова для поиска (через запятую):",
     value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
 )
 exclude_input = st.text_area(
-    "Исключить вакансии с ключевыми словами (через запятую)",
+    "Введите слова для исключения (через запятую):",
     value="БАДы,рецепт,здравоохран"
 )
 
 keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
-exclude_keywords = [e.strip() for e in exclude_input.split(",") if e.strip()]
+exclude_keywords = [k.strip() for k in exclude_input.split(",") if k.strip()]
 
+# Настройки HH API
 area_id = 160
 per_page = 100
 url_api = "https://api.hh.kz/vacancies"
 city = "Алматы"
 
-# Кнопка запуска поиска
-if st.button("Собрать вакансии"):
-    vacancies = []
+vacancies = []
+
+# Кнопка для запуска поиска
+if st.button("Запустить поиск"):
+
     progress_text = st.empty()
-    total_keywords = len(keywords)
-    
-    for idx, keyword in enumerate(keywords, start=1):
+    total_count = 0
+
+    for keyword in keywords:
         page = 0
-        progress_text.text(f"Поиск по ключевому слову {idx}/{total_keywords}: {keyword}")
+        progress_text.text(f"Идет поиск по ключевому слову: {keyword}")
         while True:
             params = {"text": keyword, "area": area_id, "per_page": per_page, "page": page}
             headers = {"User-Agent": "Mozilla/5.0"}
-            try:
-                response = requests.get(url_api, params=params, headers=headers, timeout=10)
-                data = response.json()
-            except Exception as e:
-                st.error(f"Ошибка при запросе: {e}")
+            response = requests.get(url_api, params=params, headers=headers)
+            if response.status_code != 200:
+                st.error(f"Ошибка API: {response.status_code}")
                 break
-            
+            data = response.json()
             items = data.get("items", [])
             if not items:
                 break
-
             for vac in items:
                 title = vac.get("name", "")
                 if keyword.lower() in title.lower() and not any(ex.lower() in title.lower() for ex in exclude_keywords):
                     salary = vac.get("salary")
                     addr = vac.get("address")
-                    address = ", ".join(filter(None, [addr.get("street","") if addr else "", addr.get("building","") if addr else ""])) or "-"
+                    address_parts = []
+                    if addr:
+                        if addr.get("street"):
+                            address_parts.append(addr.get("street"))
+                        if addr.get("building"):
+                            address_parts.append(addr.get("building"))
+                    address = ", ".join(address_parts) if address_parts else "-"
+                    
+                    # Ссылка на 2GIS
+                    if address != "-":
+                        query = f"{city}, {address}".replace(" ", "+")
+                        address_link = f"https://2gis.kz/almaty/search/{query}"
+                    else:
+                        address_link = "-"
                     
                     vacancies.append({
-                        "keyword": keyword,
-                        "title": title,
-                        "url": vac.get("alternate_url", "-"),
-                        "company": vac.get("employer", {}).get("name", "-"),
-                        "description": vac.get("snippet", {}).get("responsibility", "-"),
-                        "published_at": vac.get("published_at", "-"),
-                        "salary_from": salary.get("from","-") if salary else "-",
-                        "salary_to": salary.get("to","-") if salary else "-",
-                        "currency": salary.get("currency","-") if salary else "-",
-                        "address": address
+                        "Название вакансии": title,
+                        "Компания": vac.get("employer", {}).get("name", "-"),
+                        "Ключевое слово": keyword,
+                        "Дата публикации": vac.get("published_at", "-")[:10],
+                        "Зарплата": f"{salary.get('from', '-') if salary else '-'} - {salary.get('to', '-') if salary else '-'} {salary.get('currency', '-') if salary else '-'}",
+                        "Адрес": address,
+                        "Ссылка HH": vac.get("alternate_url", "-"),
+                        "Ссылка 2GIS": address_link
                     })
             page += 1
+            total_count += len(items)
             time.sleep(0.2)
-    
-    if not vacancies:
-        st.warning("Вакансий не найдено")
-    else:
+
+    st.success(f"Поиск завершен. Найдено {len(vacancies)} вакансий.")
+
+    if vacancies:
         df = pd.DataFrame(vacancies)
-        df['published_date'] = pd.to_datetime(df['published_at'], errors='coerce').dt.date
-        df.sort_values('published_date', ascending=False, inplace=True)
-        today = datetime.now().date()
-
-        # --- Генерация HTML таблицы ---
-        table_html = "<table style='border-collapse: collapse; width: 100%;'>"
-        table_html += "<tr style='background-color:#f2f2f2;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
+        df.sort_values("Дата публикации", ascending=False, inplace=True)
         
-        for _, row in df.iterrows():
-            pub_date = row['published_date']
-            days_diff = (today - pub_date).days if pd.notnull(pub_date) else 999
-
-            if days_diff <= 7:
-                color = "#d4edda"
-            elif days_diff <= 14:
-                color = "#cce5ff"
-            elif days_diff <= 21:
-                color = "#fff3cd"
-            else:
-                color = "#e2e3e5"
-
-            salary_text = f"{row['salary_from']} - {row['salary_to']} {row['currency']}" if row['salary_from'] != "-" else "-"
-            vacancy_link = f"<a href='{row['url']}' target='_blank'>{row['title']}</a>"
-            if row['address'] != "-":
-                query = f"{city}, {row['address']}".replace(" ", "+")
-                address_link = f"<a href='https://2gis.kz/almaty/search/{query}' target='_blank'>{row['address']}</a>"
-            else:
-                address_link = "-"
-
-            table_html += f"<tr style='background-color:{color}; padding:5px;'>"
-            table_html += f"<td>{vacancy_link}</td>"
-            table_html += f"<td>{row['company']}</td>"
-            table_html += f"<td>{row['keyword']}</td>"
-            table_html += f"<td>{pub_date}</td>"
-            table_html += f"<td>{salary_text}</td>"
-            table_html += f"<td>{address_link}</td>"
-            table_html += "</tr>"
-        table_html += "</table>"
-
-        st.markdown(table_html, unsafe_allow_html=True)
-
-        # --- Кнопка для скачивания CSV ---
-        csv = df.to_csv(index=False, encoding="utf-8-sig")
+        # Отображение в Streamlit с кликабельными ссылками
+        def make_clickable(url):
+            return f'<a href="{url}" target="_blank">Ссылка</a>' if url != "-" else "-"
+        
+        df_display = df.copy()
+        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(make_clickable)
+        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(make_clickable)
+        
+        st.write("Результаты:")
+        st.write(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
+        
+        # Выгрузка Excel
+        excel_buffer = io.BytesIO()
+        df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
         st.download_button(
-            label="Скачать CSV",
-            data=csv,
-            file_name="vacancies.csv",
-            mime="text/csv"
+            label="Скачать Excel",
+            data=excel_buffer,
+            file_name="vacancies.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-        st.success(f"Найдено {len(df)} вакансий")
