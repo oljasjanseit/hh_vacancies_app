@@ -2,32 +2,38 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+import io
 
-st.set_page_config(page_title="HH Vacancies", layout="wide")
-st.title("Поиск вакансий на HH")
+st.set_page_config(page_title="HH Вакансии", layout="wide")
 
-# --- Настройки ---
-keywords_input = st.text_area(
-    "Ключевые слова (через запятую)", 
-    "продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
-)
-exclude_input = st.text_area("Исключить слова (через запятую)", "БАДы,рецепт,здравоохран")
-keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
-exclude_keywords = [e.strip() for e in exclude_input.split(",") if e.strip()]
+st.title("Поиск вакансий по ключевым словам на HH.kz")
 
-area_id = 160
+# --- Настройки поиска ---
+keywords = st.text_area(
+    "Введите ключевые слова через запятую",
+    value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
+).split(",")
+keywords = [k.strip() for k in keywords if k.strip()]
+
+exclude_keywords = st.text_area(
+    "Исключить вакансии по ключевым словам (через запятую)",
+    value="БАДы,рецепт,здравоохран"
+).split(",")
+exclude_keywords = [k.strip() for k in exclude_keywords if k.strip()]
+
+area_id = 160  # Алматы
 per_page = 100
 url_api = "https://api.hh.kz/vacancies"
 city = "Алматы"
 
-vacancies = []
-
 if st.button("Начать поиск"):
+    vacancies = []
     progress_text = st.empty()
+    
     for keyword in keywords:
         page = 0
-        progress_text.text(f"Идет поиск по ключевому слову: {keyword}")
+        progress_text.text(f"Ищем вакансии по ключевому слову: {keyword}")
         while True:
             params = {"text": keyword, "area": area_id, "per_page": per_page, "page": page}
             headers = {"User-Agent": "Mozilla/5.0"}
@@ -48,7 +54,14 @@ if st.button("Начать поиск"):
                         if addr.get("building"):
                             address_parts.append(addr.get("building"))
                     address = ", ".join(address_parts) if address_parts else "-"
-
+                    
+                    # Ссылка на 2GIS
+                    if address != "-":
+                        query = f"{city}, {address}".replace(" ", "+")
+                        address_link = f"https://2gis.kz/almaty/search/{query}"
+                    else:
+                        address_link = "-"
+                    
                     vacancies.append({
                         "keyword": keyword,
                         "title": title,
@@ -59,45 +72,42 @@ if st.button("Начать поиск"):
                         "salary_from": salary.get("from", "-") if salary else "-",
                         "salary_to": salary.get("to", "-") if salary else "-",
                         "currency": salary.get("currency", "-") if salary else "-",
-                        "address": address
+                        "address": address,
+                        "address_link": address_link
                     })
             page += 1
             time.sleep(0.2)
-
-    if vacancies:
+    
+    if not vacancies:
+        st.warning("Вакансий не найдено")
+    else:
         df = pd.DataFrame(vacancies)
         df['published_date'] = pd.to_datetime(df['published_at']).dt.date
         df.sort_values('published_date', ascending=False, inplace=True)
+        
+        # --- Таблица в Streamlit ---
+        def make_clickable(url, text):
+            return f'<a href="{url}" target="_blank">{text}</a>'
 
-        # --- Генерация HTML таблицы ---
-        table_html = "<table style='border-collapse: collapse; width: 100%;'>"
-        # Шапка таблицы: черный фон, белый текст
-        table_html += "<tr style='background-color:#000000; color:#ffffff;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
-
-        for _, row in df.iterrows():
-            salary_text = f"{row['salary_from']} - {row['salary_to']} {row['currency']}" if row['salary_from'] != "-" else "-"
-            vacancy_link = f"<a href='{row['url']}' target='_blank'>{row['title']}</a>"
-            if row['address'] != "-":
-                query = f"{city}, {row['address']}".replace(" ", "+")
-                address_link = f"<a href='https://2gis.kz/almaty/search/{query}' target='_blank'>{row['address']}</a>"
-            else:
-                address_link = "-"
-
-            table_html += "<tr style='padding:5px;'>"
-            table_html += f"<td>{vacancy_link}</td>"
-            table_html += f"<td>{row['company']}</td>"
-            table_html += f"<td>{row['keyword']}</td>"
-            table_html += f"<td>{row['published_date']}</td>"
-            table_html += f"<td>{salary_text}</td>"
-            table_html += f"<td>{address_link}</td>"
-            table_html += "</tr>"
-
-        table_html += "</table>"
-
-        st.markdown(table_html, unsafe_allow_html=True)
-
-        # --- Скачивание CSV ---
-        csv_data = df.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("Скачать CSV", csv_data, file_name="vacancies.csv", mime="text/csv")
-    else:
-        st.info("Вакансий не найдено по заданным ключевым словам.")
+        df_display = df.copy()
+        df_display['title'] = df.apply(lambda x: make_clickable(x['url'], x['title']), axis=1)
+        df_display['address'] = df.apply(lambda x: make_clickable(x['address_link'], x['address']) if x['address_link']!="-"
+                                         else "-", axis=1)
+        df_display['salary'] = df.apply(lambda x: f"{x['salary_from']} - {x['salary_to']} {x['currency']}" if x['salary_from'] != "-" else "-", axis=1)
+        
+        df_display = df_display[['title','company','keyword','published_date','salary','address']]
+        
+        st.markdown(
+            df_display.to_html(escape=False, index=False),
+            unsafe_allow_html=True
+        )
+        
+        # --- CSV скачивание ---
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+        st.download_button(
+            label="Скачать CSV",
+            data=csv_buffer.getvalue(),
+            file_name="vacancies.csv",
+            mime="text/csv"
+        )
