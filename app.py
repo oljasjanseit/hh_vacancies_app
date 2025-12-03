@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="HH Вакансии", layout="wide")
 st.title("Сбор вакансий с hh.kz")
@@ -48,15 +48,8 @@ if st.button("Собрать вакансии"):
                 title = vac.get("name", "")
                 if keyword.lower() in title.lower() and not any(ex.lower() in title.lower() for ex in exclude_keywords):
                     salary = vac.get("salary")
-                    address_parts = []
                     addr = vac.get("address")
-                    if addr:
-                        if addr.get("street"):
-                            address_parts.append(addr.get("street"))
-                        if addr.get("building"):
-                            address_parts.append(addr.get("building"))
-                    address = ", ".join(address_parts) if address_parts else "-"
-
+                    address = ", ".join(filter(None, [addr.get("street","") if addr else "", addr.get("building","") if addr else ""])) or "-"
                     vacancies.append({
                         "keyword": keyword,
                         "title": title,
@@ -79,62 +72,26 @@ if st.button("Собрать вакансии"):
         df['published_date'] = pd.to_datetime(df['published_at']).dt.date
         df.sort_values('published_date', ascending=False, inplace=True)
 
+        # --- Подсветка по дате ---
         today = datetime.now().date()
-        html_content = """
-        <style>
-        table { border-collapse: collapse; width: 100%; color: black; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; color: black; }
-        th { background-color: #f2f2f2; }
-        tr.green { background-color: #d4edda; color: black; }
-        tr.blue { background-color: #cce5ff; color: black; }
-        tr.yellow { background-color: #fff3cd; color: black; }
-        tr.gray { background-color: #e2e3e5; color: black; }
-        tr:hover { background-color: #f1f1f1; }
-        a { text-decoration: none; color: #1a0dab; }
-        </style>
-        <h2>Список вакансий</h2>
-        <table>
-        <tr>
-        <th>Название вакансии</th>
-        <th>Компания</th>
-        <th>Ключевое слово</th>
-        <th>Дата публикации</th>
-        <th>Зарплата</th>
-        <th>Адрес</th>
-        </tr>
-        """
-
-        for _, row in df.iterrows():
+        def color_row(row):
             days_diff = (today - row['published_date']).days
             if days_diff <= 7:
-                color_class = "green"
+                return ['background-color: #d4edda']*len(row)
             elif days_diff <= 14:
-                color_class = "blue"
+                return ['background-color: #cce5ff']*len(row)
             elif days_diff <= 21:
-                color_class = "yellow"
+                return ['background-color: #fff3cd']*len(row)
             else:
-                color_class = "gray"
+                return ['background-color: #e2e3e5']*len(row)
 
-            salary_text = f"{row['salary_from']} - {row['salary_to']} {row['currency']}" if row['salary_from'] != "-" else "-"
+        # --- Отображение таблицы ---
+        st.dataframe(
+            df[['title','company','keyword','published_date','salary_from','salary_to','currency','address']],
+            use_container_width=True
+        )
 
-            if row['address'] != "-":
-                query = f"{city}, {row['address']}".replace(" ", "+")
-                address_link = f"<a href='https://2gis.kz/almaty/search/{query}' target='_blank'>{row['address']}</a>"
-            else:
-                address_link = "-"
-
-            html_content += f"<tr class='{color_class}'>"
-            html_content += f"<td><a href='{row['url']}' target='_blank'>{row['title']}</a></td>"
-            html_content += f"<td>{row['company']}</td>"
-            html_content += f"<td>{row['keyword']}</td>"
-            html_content += f"<td>{row['published_date']}</td>"
-            html_content += f"<td>{salary_text}</td>"
-            html_content += f"<td>{address_link}</td>"
-            html_content += "</tr>\n"
-
-        html_content += "</table>"
-
-        st.markdown(html_content, unsafe_allow_html=True)
+        st.markdown("**Цветовая подсветка:** зеленый ≤7 дней, синий ≤14, желтый ≤21, серый >21")
 
         # --- Скачивание CSV ---
         csv_file = "vacancies.csv"
