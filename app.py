@@ -71,7 +71,8 @@ if st.button("Начать поиск"):
 
         # --- Генерация HTML таблицы ---
         table_html = "<table style='border-collapse: collapse; width: 100%;'>"
-        table_html += "<tr style='background-color:#f2f2f2;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
+        # Шапка таблицы: черный фон, белый текст
+        table_html += "<tr style='background-color:#000000; color:#ffffff;'><th>Вакансия</th><th>Компания</th><th>Ключевое слово</th><th>Дата публикации</th><th>Зарплата</th><th>Адрес</th></tr>"
 
         for _, row in df.iterrows():
             salary_text = f"{row['salary_from']} - {row['salary_to']} {row['currency']}" if row['salary_from'] != "-" else "-"
@@ -82,7 +83,7 @@ if st.button("Начать поиск"):
             else:
                 address_link = "-"
 
-            table_html += f"<tr style='padding:5px;'>"
+            table_html += "<tr style='padding:5px;'>"
             table_html += f"<td>{vacancy_link}</td>"
             table_html += f"<td>{row['company']}</td>"
             table_html += f"<td>{row['keyword']}</td>"
