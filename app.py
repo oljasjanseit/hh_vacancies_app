@@ -121,9 +121,7 @@ if st.button("Запустить поиск"):
     st.success(f"Поиск завершен. Найдено {len(vacancies)} вакансий.")
 
     if vacancies:
-        # Убираем дубли по ссылке
-        df = pd.DataFrame(vacancies).drop_duplicates(subset=["Ссылка HH"])
-        df.sort_values("Дата публикации", ascending=False, inplace=True)
+
 
         # Кликабельные ссылки
         def make_clickable(url):
