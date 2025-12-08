@@ -4,21 +4,18 @@ import pandas as pd
 import time
 from datetime import datetime
 import io
-from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="HH Vacancies App", layout="wide")
 st.title("HH Vacancies Scraper")
 
-# ======================
-# Ввод ключевых слов
-# ======================
+# ==== Ввод ключевых слов ====
 title_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в названии вакансии (через запятую):",
-    value="продукт менеджер,product manager"
+    value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
 )
 title_exclude_input = st.text_area(
-    "Введите слова для исключения для поиска в названии вакансии (через запятую):",
-    value="БАДы,рецепт,здравоохран"
+    "Введите слова для исключения в названии вакансии (через запятую):",
+    value="БАДы,рецепт,здравоохран,фарм,pharm"
 )
 desc_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в описании вакансии (через запятую):",
@@ -26,7 +23,7 @@ desc_keywords_input = st.text_area(
 )
 desc_exclude_input = st.text_area(
     "Введите слова для исключения в описании вакансии (через запятую):",
-    value="БАДы,рецепт"
+    value=""
 )
 
 title_keywords = [k.strip().lower() for k in title_keywords_input.split(",") if k.strip()]
@@ -34,14 +31,12 @@ title_exclude = [k.strip().lower() for k in title_exclude_input.split(",") if k.
 desc_keywords = [k.strip().lower() for k in desc_keywords_input.split(",") if k.strip()]
 desc_exclude = [k.strip().lower() for k in desc_exclude_input.split(",") if k.strip()]
 
-desc_logic = st.radio(
+desc_all_words = st.radio(
     "Как применять ключевые слова для описания вакансии?",
-    options=["Хотя бы одно совпадение", "Все слова должны совпасть"]
-)
+    ("Хотя бы одно совпадение", "Все слова должны совпасть")
+) == "Все слова должны совпасть"
 
-# ======================
-# Настройки HH API
-# ======================
+# ==== Настройки HH API ====
 area_id = 160
 per_page = 100
 url_api = "https://api.hh.kz/vacancies"
@@ -49,13 +44,10 @@ city = "Алматы"
 
 vacancies = []
 
-# ======================
-# Кнопка для запуска поиска
-# ======================
+# ==== Кнопка запуска поиска ====
 if st.button("Запустить поиск"):
 
     progress_text = st.empty()
-    total_count = 0
 
     for keyword in title_keywords:
         page = 0
@@ -71,48 +63,49 @@ if st.button("Запустить поиск"):
             items = data.get("items", [])
             if not items:
                 break
+
             for vac in items:
-                title = vac.get("name", "")
+                title = vac.get("name", "-")
                 title_lower = title.lower()
-                # фильтр по названию вакансии
+
+                # Фильтр по названию вакансии
                 if not any(ex in title_lower for ex in title_exclude) and any(kw in title_lower for kw in title_keywords):
-                    # Берем полное описание вакансии и преобразуем в текст
-                    description_html = vac.get("description", "")
-                    description_text = BeautifulSoup(description_html or "", "html.parser").get_text(separator=" ")
-                    description_lower = description_text.lower()
+
+                    # Формируем описание вакансии
+                    snippet = vac.get("snippet") or {}
+                    requirement = snippet.get("requirement") or ""
+                    responsibility = snippet.get("responsibility") or ""
+                    description = f"{requirement} {responsibility}".lower()
 
                     # Фильтр по описанию
                     if desc_keywords:
-                        if desc_logic == "Хотя бы одно совпадение":
-                            if not any(kw in description_lower for kw in desc_keywords):
+                        if desc_all_words:
+                            if not all(word in description for word in desc_keywords):
                                 continue
-                        else:  # Все слова должны совпасть
-                            if not all(kw in description_lower for kw in desc_keywords):
+                        else:
+                            if not any(word in description for word in desc_keywords):
                                 continue
-                    if any(ex in description_lower for ex in desc_exclude):
-                        continue
 
-                    # Формируем адрес
-                    addr = vac.get("address")
-                    address_parts = []
-                    if addr:
-                        if addr.get("street"):
-                            address_parts.append(addr.get("street"))
-                        if addr.get("building"):
-                            address_parts.append(addr.get("building"))
-                    address = ", ".join(address_parts) if address_parts else "-"
+                    if desc_exclude:
+                        if any(word in description for word in desc_exclude):
+                            continue
 
-                    # Ссылка на 2GIS
+                    salary = vac.get("salary")
+                    addr = vac.get("address") or {}
+                    address_parts = [addr.get("street", ""), addr.get("building", "")]
+                    address = ", ".join([a for a in address_parts if a]) or "-"
+
+                    # Ссылки
                     if address != "-":
                         query = f"{city}, {address}".replace(" ", "+")
                         address_link = f"https://2gis.kz/almaty/search/{query}"
                     else:
                         address_link = "-"
 
-                    salary = vac.get("salary")
                     vacancies.append({
                         "Название вакансии": title,
                         "Компания": vac.get("employer", {}).get("name", "-"),
+                        "Ключевое слово в названии": keyword,
                         "Дата публикации": vac.get("published_at", "-")[:10],
                         "Зарплата": f"{salary.get('from', '-') if salary else '-'} - {salary.get('to', '-') if salary else '-'} {salary.get('currency', '-') if salary else '-'}",
                         "Адрес": address,
@@ -120,14 +113,13 @@ if st.button("Запустить поиск"):
                         "Ссылка 2GIS": address_link
                     })
             page += 1
-            total_count += len(items)
             time.sleep(0.2)
 
     st.success(f"Поиск завершен. Найдено {len(vacancies)} вакансий.")
 
     if vacancies:
-        df = pd.DataFrame(vacancies)
-        df.drop_duplicates(subset="Ссылка HH", inplace=True)
+        # Убираем дубликаты по ссылке на HH
+        df = pd.DataFrame(vacancies).drop_duplicates(subset=["Ссылка HH"])
         df.sort_values("Дата публикации", ascending=False, inplace=True)
 
         # Кликабельные ссылки
@@ -143,7 +135,7 @@ if st.button("Запустить поиск"):
 
         # Выгрузка Excel
         excel_buffer = io.BytesIO()
-        df.to_excel(excel_buffer, index=False)
+        df.to_excel(excel_buffer, index=False, engine="openpyxl")
         excel_buffer.seek(0)
         st.download_button(
             label="Скачать Excel",
