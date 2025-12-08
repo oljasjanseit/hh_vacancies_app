@@ -9,20 +9,36 @@ st.set_page_config(page_title="HH Vacancies App", layout="wide")
 
 st.title("HH Vacancies Scraper")
 
-# Ввод ключевых слов
+# --- Ввод ключевых слов для НАЗВАНИЯ ---
 keywords_input = st.text_area(
-    "Введите ключевые слова для поиска (через запятую):",
+    "Введите ключевые слова для поиска в названии вакансии (через запятую):",
     value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
 )
+
 exclude_input = st.text_area(
-    "Введите слова для исключения (через запятую):",
-    value="БАДы,рецепт,здравоохран"
+    "Введите слова для исключения в названии вакансии (через запятую):",
+    value="БАДы,рецепт,здравоохран,фарм,pharm"
 )
 
-keywords = [k.strip() for k in keywords_input.split(",") if k.strip()]
-exclude_keywords = [k.strip() for k in exclude_input.split(",") if k.strip()]
+# --- Ввод ключевых слов для ОПИСАНИЯ ---
+desc_keywords_input = st.text_area(
+    "Введите ключевые слова для поиска в описании вакансии (через запятую):",
+    value="аналитика, продукт, CRM"
+)
 
-# Настройки HH API
+desc_exclude_input = st.text_area(
+    "Введите слова для исключения в описании вакансии (через запятую):",
+    value="продажи,холодные звонки,стажировка"
+)
+
+# Преобразование списков
+keywords = [k.strip().lower() for k in keywords_input.split(",") if k.strip()]
+exclude_keywords = [k.strip().lower() for k in exclude_input.split(",") if k.strip()]
+
+desc_keywords = [k.strip().lower() for k in desc_keywords_input.split(",") if k.strip()]
+desc_exclude_keywords = [k.strip().lower() for k in desc_exclude_input.split(",") if k.strip()]
+
+# API HH
 area_id = 160
 per_page = 100
 url_api = "https://api.hh.kz/vacancies"
@@ -30,7 +46,7 @@ city = "Алматы"
 
 vacancies = []
 
-# Кнопка для запуска поиска
+# --- Кнопка запуска ---
 if st.button("Запустить поиск"):
 
     progress_text = st.empty()
@@ -39,22 +55,42 @@ if st.button("Запустить поиск"):
     for keyword in keywords:
         page = 0
         progress_text.text(f"Идет поиск по ключевому слову: {keyword}")
+
         while True:
             params = {"text": keyword, "area": area_id, "per_page": per_page, "page": page}
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(url_api, params=params, headers=headers)
+
             if response.status_code != 200:
                 st.error(f"Ошибка API: {response.status_code}")
                 break
+
             data = response.json()
             items = data.get("items", [])
             if not items:
                 break
+
             for vac in items:
-                title = vac.get("name", "")
-                if keyword.lower() in title.lower() and not any(ex.lower() in title.lower() for ex in exclude_keywords):
+
+                title = vac.get("name", "").lower()
+                descr_full = (
+                    (vac.get("snippet", {}).get("responsibility") or "") + " " +
+                    (vac.get("snippet", {}).get("requirement") or "")
+                ).lower()
+
+                # --- Фильтр по названию ---
+                cond_title_kw = any(k in title for k in keywords)
+                cond_title_ex = not any(ex in title for ex in exclude_keywords)
+
+                # --- Фильтр по описанию ---
+                cond_desc_kw = any(k in descr_full for k in desc_keywords) if desc_keywords else True
+                cond_desc_ex = not any(ex in descr_full for ex in desc_exclude_keywords)
+
+                if cond_title_kw and cond_title_ex and cond_desc_kw and cond_desc_ex:
                     salary = vac.get("salary")
                     addr = vac.get("address")
+
+                    # Адрес форматируем
                     address_parts = []
                     if addr:
                         if addr.get("street"):
@@ -62,16 +98,16 @@ if st.button("Запустить поиск"):
                         if addr.get("building"):
                             address_parts.append(addr.get("building"))
                     address = ", ".join(address_parts) if address_parts else "-"
-                    
-                    # Ссылка на 2GIS
+
+                    # Ссылка 2GIS
                     if address != "-":
                         query = f"{city}, {address}".replace(" ", "+")
                         address_link = f"https://2gis.kz/almaty/search/{query}"
                     else:
                         address_link = "-"
-                    
+
                     vacancies.append({
-                        "Название вакансии": title,
+                        "Название вакансии": vac.get("name", "-"),
                         "Компания": vac.get("employer", {}).get("name", "-"),
                         "Ключевое слово": keyword,
                         "Дата публикации": vac.get("published_at", "-")[:10],
@@ -80,6 +116,7 @@ if st.button("Запустить поиск"):
                         "Ссылка HH": vac.get("alternate_url", "-"),
                         "Ссылка 2GIS": address_link
                     })
+
             page += 1
             total_count += len(items)
             time.sleep(0.2)
@@ -89,22 +126,23 @@ if st.button("Запустить поиск"):
     if vacancies:
         df = pd.DataFrame(vacancies)
         df.sort_values("Дата публикации", ascending=False, inplace=True)
-        
-        # Отображение в Streamlit с кликабельными ссылками
+
+        # --- Кликие ссылки ---
         def make_clickable(url):
             return f'<a href="{url}" target="_blank">Ссылка</a>' if url != "-" else "-"
-        
+
         df_display = df.copy()
         df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(make_clickable)
         df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(make_clickable)
-        
+
         st.write("Результаты:")
         st.write(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
-        
-        # Выгрузка Excel
+
+        # --- Excel ---
         excel_buffer = io.BytesIO()
         df.to_excel(excel_buffer, index=False)
         excel_buffer.seek(0)
+
         st.download_button(
             label="Скачать Excel",
             data=excel_buffer,
