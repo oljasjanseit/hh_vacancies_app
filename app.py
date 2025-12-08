@@ -11,11 +11,11 @@ st.title("HH Vacancies Scraper")
 # Ввод ключевых слов
 title_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в названии вакансии (через запятую):",
-    value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта,продуктолог,эксперт по продукту,продуктовый эксперт,продуктовый менеджер"
+    value="продукт менеджер,product manager"
 )
 title_exclude_input = st.text_area(
     "Введите слова для исключения для поиска в названии вакансии (через запятую):",
-    value="БАДы,рецепт,здравоохран,фарм,pharm"
+    value=""
 )
 desc_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в описании вакансии (через запятую):",
@@ -26,15 +26,16 @@ desc_exclude_input = st.text_area(
     value=""
 )
 
-title_keywords = [k.strip().lower() for k in title_keywords_input.split(",") if k.strip()]
-title_exclude = [k.strip().lower() for k in title_exclude_input.split(",") if k.strip()]
-desc_keywords = [k.strip().lower() for k in desc_keywords_input.split(",") if k.strip()]
-desc_exclude = [k.strip().lower() for k in desc_exclude_input.split(",") if k.strip()]
-
 desc_mode = st.radio(
     "Как применять ключевые слова для описания вакансии?",
     ("Хотя бы одно совпадение", "Все слова должны совпасть")
 )
+
+# Преобразуем в списки и в нижний регистр
+title_keywords = [k.strip().lower() for k in title_keywords_input.split(",") if k.strip()]
+title_exclude = [k.strip().lower() for k in title_exclude_input.split(",") if k.strip()]
+desc_keywords = [k.strip().lower() for k in desc_keywords_input.split(",") if k.strip()]
+desc_exclude = [k.strip().lower() for k in desc_exclude_input.split(",") if k.strip()]
 
 # Настройки HH API
 area_id = 160
@@ -46,14 +47,12 @@ vacancies = []
 
 # Кнопка запуска поиска
 if st.button("Запустить поиск"):
-
     progress_text = st.empty()
-    total_count = 0
-
+    
     for title_keyword in title_keywords:
         page = 0
-        progress_text.text(f"Идет поиск по ключевому слову в названии: {title_keyword}")
         while True:
+            progress_text.text(f"Идет поиск по ключевому слову в названии: {title_keyword}")
             params = {"text": title_keyword, "area": area_id, "per_page": per_page, "page": page}
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(url_api, params=params, headers=headers)
@@ -66,26 +65,24 @@ if st.button("Запустить поиск"):
                 break
 
             for vac in items:
-                title = vac.get("name", "")
-                title_lower = title.lower()
+                title = vac.get("name", "").lower()
+                # Фильтруем по названию
+                if not any(ex in title for ex in title_exclude) and any(k in title for k in title_keywords):
+                    description = ""
+                    snippet = vac.get("snippet") or {}
+                    description = (snippet.get("requirement") or "") + " " + (snippet.get("responsibility") or "")
+                    description_lower = description.lower()
 
-                # Фильтруем по названию вакансии
-                if not any(ex in title_lower for ex in title_exclude) and any(k in title_lower for k in title_keywords):
-
-                    # Полный текст описания вакансии
-                    description = (vac.get("description") or "").lower()
-
-                    # Фильтруем по описанию
+                    # Фильтрация по описанию
                     if desc_keywords:
                         if desc_mode == "Хотя бы одно совпадение":
-                            if not any(k in description for k in desc_keywords):
+                            if not any(k in description_lower for k in desc_keywords):
                                 continue
-                        else:  # Все слова должны совпасть
-                            if not all(k in description for k in desc_keywords):
+                        else:
+                            if not all(k in description_lower for k in desc_keywords):
                                 continue
-
                     if desc_exclude:
-                        if any(ex in description for ex in desc_exclude):
+                        if any(ex in description_lower for ex in desc_exclude):
                             continue
 
                     # Зарплата
@@ -93,16 +90,15 @@ if st.button("Запустить поиск"):
                     salary_text = f"{salary.get('from', '-') if salary else '-'} - {salary.get('to', '-') if salary else '-'} {salary.get('currency', '-') if salary else '-'}"
 
                     # Адрес
-                    addr = vac.get("address")
+                    addr = vac.get("address") or {}
                     address_parts = []
-                    if addr:
-                        if addr.get("street"):
-                            address_parts.append(addr.get("street"))
-                        if addr.get("building"):
-                            address_parts.append(addr.get("building"))
+                    if addr.get("street"):
+                        address_parts.append(addr.get("street"))
+                    if addr.get("building"):
+                        address_parts.append(addr.get("building"))
                     address = ", ".join(address_parts) if address_parts else "-"
 
-                    # Ссылка на 2GIS
+                    # 2GIS ссылка
                     if address != "-":
                         query = f"{city}, {address}".replace(" ", "+")
                         address_link = f"https://2gis.kz/almaty/search/{query}"
@@ -110,7 +106,7 @@ if st.button("Запустить поиск"):
                         address_link = "-"
 
                     vacancies.append({
-                        "Название вакансии": title,
+                        "Название вакансии": vac.get("name", "-"),
                         "Компания": vac.get("employer", {}).get("name", "-"),
                         "Ключевое слово в названии": title_keyword,
                         "Дата публикации": vac.get("published_at", "-")[:10],
@@ -119,9 +115,7 @@ if st.button("Запустить поиск"):
                         "Ссылка HH": vac.get("alternate_url", "-"),
                         "Ссылка 2GIS": address_link
                     })
-
             page += 1
-            total_count += len(items)
             time.sleep(0.2)
 
     st.success(f"Поиск завершен. Найдено {len(vacancies)} вакансий.")
@@ -142,7 +136,7 @@ if st.button("Запустить поиск"):
         st.write("Результаты:")
         st.write(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-        # Выгрузка Excel
+        # Excel выгрузка
         excel_buffer = io.BytesIO()
         df.to_excel(excel_buffer, index=False)
         excel_buffer.seek(0)
