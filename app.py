@@ -53,6 +53,7 @@ url_api = "https://api.hh.kz/vacancies"
 city = "Алматы"
 
 vacancies = []
+seen_urls = set()  # множество для отслеживания уникальных ссылок
 
 
 def highlight_text(text, words):
@@ -91,6 +92,11 @@ if st.button("Запустить поиск"):
                 break
 
             for vac in items:
+                url = vac.get("alternate_url", "-")
+                if url in seen_urls:
+                    continue  # пропускаем дубликаты
+                seen_urls.add(url)
+
                 title = vac.get("name", "")
                 descr = vac.get("snippet", {}).get("responsibility", "")
 
@@ -136,52 +142,36 @@ if st.button("Запустить поиск"):
                     "Дата публикации": vac.get("published_at", "-")[:10],
                     "Описание": descr_highlighted,
                     "Адрес": address,
-                    "Ссылка HH": vac.get("alternate_url", "-"),
+                    "Ссылка HH": url,
+                    "Ссылка 2GIS": f"https://2gis.kz/almaty/search/{city.replace(' ','+')},{address.replace(' ','+')}" if address != "-" else "-"
                 })
 
             page += 1
             time.sleep(0.2)
 
-    st.success(f"Поиск завершён. Найдено {len(vacancies)} вакансий.")
+    st.success(f"Поиск завершён. Найдено {len(vacancies)} вакансий (без дублей).")
 
     if vacancies:
         df = pd.DataFrame(vacancies)
 
-        # Вывод таблицы
+        # Отображение таблицы с HTML
         st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-        # 🔥 АНАЛИТИКА: Частота упоминаний навыков
+        # 🔥 Аналитика навыков
         st.header("Аналитика навыков")
-
-        skill_freq = {}
-
-        for skill in desc_include_keywords:
-            count = sum(skill.lower() in str(desc).lower() for desc in df["Описание"])
-            skill_freq[skill] = count
-
-        df_skills = pd.DataFrame({
-            "Навык": list(skill_freq.keys()),
-            "Количество": list(skill_freq.values())
-        })
-
-        chart = (
-            alt.Chart(df_skills)
-            .mark_bar()
-            .encode(
-                x="Количество:Q",
-                y=alt.Y("Навык:N", sort="-x"),
-                tooltip=["Навык", "Количество"]
-            )
-            .properties(height=400)
-        )
-
+        skill_freq = {w: sum(w.lower() in str(desc).lower() for desc in df["Описание"]) for w in desc_include_keywords}
+        df_skills = pd.DataFrame({"Навык": list(skill_freq.keys()), "Количество": list(skill_freq.values())})
+        chart = alt.Chart(df_skills).mark_bar().encode(
+            x="Количество:Q",
+            y=alt.Y("Навык:N", sort="-x"),
+            tooltip=["Навык", "Количество"]
+        ).properties(height=400)
         st.altair_chart(chart, use_container_width=True)
 
         # Excel
         excel_buffer = io.BytesIO()
         df.to_excel(excel_buffer, index=False)
         excel_buffer.seek(0)
-
         st.download_button(
             "Скачать Excel",
             excel_buffer,
