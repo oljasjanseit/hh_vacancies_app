@@ -9,31 +9,35 @@ import re
 st.set_page_config(page_title="HH Vacancies App", layout="wide")
 st.title("HH Vacancies Scraper")
 
-# Ввод ключевых слов для названия вакансии
+# 4 отдельных поля ввода
 title_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в названии вакансии (через запятую):",
     value="продукт менеджер,product manager,продакт менеджер,менеджер продуктов,менеджер по продуктам,менеджер по продукту,менеджер продукта"
 )
-title_keywords = [k.strip() for k in title_keywords_input.split(",") if k.strip()]
-
-# Ввод положительных ключевых слов для описания вакансии
+title_exclude_input = st.text_area(
+    "Введите слова для исключения для поиска в названии вакансии (через запятую):",
+    value="БАДы,рецепт,здравоохран,фарм,pharm"
+)
 desc_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в описании вакансии (через запятую):",
     value="B2B,маркетинг,продукт"
 )
-desc_keywords = [k.strip() for k in desc_keywords_input.split(",") if k.strip()]
+desc_exclude_input = st.text_area(
+    "Введите слова для исключения в описании вакансии (через запятую):",
+    value="БАДы,рецепт,здравоохран,фарм,pharm"
+)
 
+# Опции применения ключевых слов для описания вакансии
 desc_match_mode = st.radio(
     "Как применять ключевые слова для описания вакансии?",
     ("Хотя бы одно совпадение", "Все слова должны совпасть")
 )
 
-# Ввод слов для исключения из названия или описания вакансии
-exclude_input = st.text_area(
-    "Введите слова для исключения в названии или описании вакансии (через запятую):",
-    value="БАДы,рецепт,здравоохран,фарм,pharm"
-)
-exclude_keywords = [k.strip() for k in exclude_input.split(",") if k.strip()]
+# Преобразование вводов в списки
+title_keywords = [k.strip() for k in title_keywords_input.split(",") if k.strip()]
+title_exclude = [k.strip() for k in title_exclude_input.split(",") if k.strip()]
+desc_keywords = [k.strip() for k in desc_keywords_input.split(",") if k.strip()]
+desc_exclude = [k.strip() for k in desc_exclude_input.split(",") if k.strip()]
 
 # Настройки HH API
 area_id = 160
@@ -64,8 +68,11 @@ if st.button("Запустить поиск"):
                 title = vac.get("name", "")
                 description = vac.get("snippet", {}).get("responsibility", "-")
                 
-                # Проверка исключающих слов
-                if any(ex.lower() in title.lower() or ex.lower() in description.lower() for ex in exclude_keywords):
+                # Исключения для названия
+                if any(ex.lower() in title.lower() for ex in title_exclude):
+                    continue
+                # Исключения для описания
+                if any(ex.lower() in description.lower() for ex in desc_exclude):
                     continue
                 
                 # Проверка положительных слов в описании
