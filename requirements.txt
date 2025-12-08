@@ -1,5 +1,6 @@
-streamlit
+beautifulsoup4
+lxml
 pandas
 requests
+streamlit
 openpyxl
-beautifulsoup4
