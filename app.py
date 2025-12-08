@@ -16,7 +16,7 @@ title_keywords_input = st.text_area(
 )
 title_keywords = [k.strip() for k in title_keywords_input.split(",") if k.strip()]
 
-# Ввод ключевых слов для текста описания вакансии
+# Ввод положительных ключевых слов для описания вакансии
 desc_keywords_input = st.text_area(
     "Введите ключевые слова для поиска в описании вакансии (через запятую):",
     value="B2B,маркетинг,продукт"
@@ -28,7 +28,7 @@ desc_match_mode = st.radio(
     ("Хотя бы одно совпадение", "Все слова должны совпасть")
 )
 
-# Ввод слов для исключения
+# Ввод слов для исключения из названия или описания вакансии
 exclude_input = st.text_area(
     "Введите слова для исключения в названии или описании вакансии (через запятую):",
     value="БАДы,рецепт,здравоохран,фарм,pharm"
@@ -64,11 +64,11 @@ if st.button("Запустить поиск"):
                 title = vac.get("name", "")
                 description = vac.get("snippet", {}).get("responsibility", "-")
                 
-                # Проверка исключений
+                # Проверка исключающих слов
                 if any(ex.lower() in title.lower() or ex.lower() in description.lower() for ex in exclude_keywords):
                     continue
                 
-                # Проверка ключевых слов в описании по выбранному режиму
+                # Проверка положительных слов в описании
                 if desc_keywords:
                     desc_text_lower = description.lower()
                     if desc_match_mode == "Хотя бы одно совпадение":
@@ -115,7 +115,7 @@ if st.button("Запустить поиск"):
         df = pd.DataFrame(vacancies).drop_duplicates(subset=["Ссылка HH"])
         df.sort_values("Дата публикации", ascending=False, inplace=True)
         
-        # Подсветка ключевых слов в описании
+        # Подсветка положительных ключевых слов в описании
         def highlight_words(text):
             highlighted = text
             for word in desc_keywords:
@@ -125,7 +125,7 @@ if st.button("Запустить поиск"):
         df_display = df.copy()
         df_display["Описание вакансии"] = df_display["Описание вакансии"].apply(highlight_words)
         
-        # Сделаем кликабельные ссылки
+        # Кликабельные ссылки
         def make_clickable(url):
             return f'<a href="{url}" target="_blank">Ссылка</a>' if url != "-" else "-"
         
