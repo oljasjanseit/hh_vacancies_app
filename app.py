@@ -72,8 +72,10 @@ if st.button("Запустить поиск"):
                 title = vac.get("name", "")
                 if not any(ex.lower() in title.lower() for ex in exclude_title) and keyword.lower() in title.lower():
                     # ======= Описание вакансии =======
-                    snippet = vac.get("snippet") or {}
-                    description = snippet.get("requirement", "") + " " + snippet.get("responsibility", "")
+                    snippet = vac.get("snippet") or {}  # если None, берем пустой словарь
+                    requirement = snippet.get("requirement") or ""
+                    responsibility = snippet.get("responsibility") or ""
+                    description = requirement + " " + responsibility
 
                     # Проверка ключевых слов в описании
                     desc_match = True
@@ -93,13 +95,12 @@ if st.button("Запустить поиск"):
                         seen_links.add(link)
 
                         salary = vac.get("salary")
-                        addr = vac.get("address")
+                        addr = vac.get("address") or {}
                         address_parts = []
-                        if addr:
-                            if addr.get("street"):
-                                address_parts.append(addr.get("street"))
-                            if addr.get("building"):
-                                address_parts.append(addr.get("building"))
+                        if addr.get("street"):
+                            address_parts.append(addr.get("street"))
+                        if addr.get("building"):
+                            address_parts.append(addr.get("building"))
                         address = ", ".join(address_parts) if address_parts else "-"
 
                         # Ссылка на 2GIS
