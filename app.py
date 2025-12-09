@@ -1,243 +1,234 @@
-import streamlit as st
-import requests
-import pandas as pd
-import time
-from bs4 import BeautifulSoup
-import io
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>HH Search Tool</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f5f7fa;
+        margin: 20px;
+    }
 
-st.set_page_config(page_title="HH FULL Vacancy Scraper", layout="wide")
-st.title("HH FULL Vacancy Scraper (Title + Description Parsing)")
+    h2 {
+        margin-bottom: 15px;
+    }
 
-# ---------------------------
-# INPUTS
-# ---------------------------
-title_keywords_input = st.text_area(
-    "Ключевые слова в названии вакансии (через запятую):",
-    value="продукт менеджер, product manager, продакт менеджер, менеджер продуктов, менеджер по продуктам, менеджер по продукту, менеджер продукта, продуктолог, эксперт по продукту, продуктовый эксперт, продуктовый менеджер"
-)
+    .container {
+        max-width: 1100px;
+        margin: auto;
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+    }
 
-title_exclude_input = st.text_area(
-    "Исключить слова в названии (через запятую):",
-    value="стажер,intern"
-)
+    label {
+        display: block;
+        margin-top: 10px;
+        font-weight: bold;
+    }
 
-desc_keywords_input = st.text_area(
-    "Ключевые слова в описании вакансии (через запятую):",
-    value="Firebase,Amplitude"
-)
+    input {
+        padding: 8px;
+        width: 100%;
+        margin-top: 5px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
 
-desc_exclude_input = st.text_area(
-    "Исключить слова в описании (через запятую):",
-    value="1C,водитель"
-)
+    button {
+        padding: 10px 20px;
+        margin-top: 15px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 15px;
+    }
 
-desc_mode = st.radio(
-    "Как применять ключевые слова в описании?",
-    ["Хотя бы одно совпадение", "Все слова должны совпасть"]
-)
+    button:hover {
+        background: #45a049;
+    }
 
-# Преобразование списков
-title_keywords = [t.strip().lower() for t in title_keywords_input.split(",") if t.strip()]
-title_exclude = [t.strip().lower() for t in title_exclude_input.split(",") if t.strip()]
-desc_keywords = [t.strip().lower() for t in desc_keywords_input.split(",") if t.strip()]
-desc_exclude = [t.strip().lower() for t in desc_exclude_input.split(",") if t.strip()]
+    .progress {
+        width: 100%;
+        background: #eee;
+        height: 22px;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 20px;
+    }
 
-# ---------------------------
-# FULL DESCRIPTION PARSER
-# ---------------------------
-def fetch_full_description(url):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        html = requests.get(url, headers=headers, timeout=8)
-        if html.status_code != 200:
-            return ""
-        soup = BeautifulSoup(html.text, "lxml")
-        container = soup.find("div", {"data-qa": "vacancy-description"})
-        if not container:
-            return ""
-        text = container.get_text(separator=" ", strip=True)
-        text = " ".join(text.replace("\n", " ").split())
-        return text.lower()
-    except:
-        return ""
+    .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: #4CAF50;
+        transition: width 0.25s;
+    }
 
-# ---------------------------
-# START SEARCH
-# ---------------------------
-if st.button("Запустить поиск"):
+    .status-text {
+        margin-top: 10px;
+        font-size: 15px;
+        font-weight: bold;
+    }
 
-    st.info("Начинаю поиск…")
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 25px;
+        background: #fff;
+        border-radius: 10px;
+        overflow: hidden;
+    }
 
-    vacancies = []
-    seen_ids = set()
+    th, td {
+        border-bottom: 1px solid #ddd;
+        padding: 8px 10px;
+        text-align: left;
+    }
 
-    hh_api = "https://api.hh.kz/vacancies"
-    per_page = 100
-    area_id = 160  # Алматы
+    th {
+        background: #f0f0f0;
+        font-weight: bold;
+    }
 
-    progress = st.progress(0)
-    current_cycle = 0
+    tr:hover {
+        background: #f9f9f9;
+    }
 
-    for keyword in title_keywords:
-        page = 0
+    .small-btn {
+        padding: 5px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        text-decoration: none;
+        background: #3498db;
+        color: white;
+    }
 
-        while True:
-            params = {"text": keyword, "area": area_id, "per_page": per_page, "page": page}
-            headers = {"User-Agent": "Mozilla/5.0"}
+    .small-btn:hover {
+        background: #2980b9;
+    }
+</style>
+</head>
 
-            try:
-                r = requests.get(hh_api, params=params, headers=headers, timeout=15)
-                if r.status_code != 200:
-                    time.sleep(1)
-                    continue
+<body>
 
-                data = r.json()
-                items = data.get("items", [])
+<div class="container">
+    <h2>Поиск вакансий HH.kz с фильтром по ключевому слову</h2>
 
-                if not items:
-                    break
+    <label>Город / Регион (area)</label>
+    <input id="area" value="160" />
 
-                for vac in items:
-                    vac_id = vac.get("id")
-                    title = vac.get("name", "").lower()
+    <label>Ключевое слово (ищется в описании вакансии)</label>
+    <input id="keyword" value="firebase" />
 
-                    # Фильтрация названия
-                    if not any(k in title for k in title_keywords):
-                        continue
-                    if any(ex in title for ex in title_exclude):
-                        continue
+    <button onclick="startSearch()">Начать поиск</button>
 
-                    # Дубликаты
-                    if vac_id in seen_ids:
-                        continue
-                    seen_ids.add(vac_id)
+    <div class="progress">
+        <div id="progressBar" class="progress-bar"></div>
+    </div>
 
-                    # HTML описания
-                    url = vac.get("alternate_url", "")
-                    full_desc = fetch_full_description(url)
+    <div id="status" class="status-text"></div>
 
-                    # Фильтрация описания
-                    if desc_exclude and any(ex in full_desc for ex in desc_exclude):
-                        continue
+    <table id="resultsTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Компания</th>
+                <th>Дата</th>
+                <th>Адрес</th>
+                <th>HH</th>
+                <th>2GIS</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
 
-                    if desc_keywords:
-                        if desc_mode == "Хотя бы одно совпадение":
-                            if not any(k in full_desc for k in desc_keywords):
-                                continue
-                        else:
-                            if not all(k in full_desc for k in desc_keywords):
-                                continue
+<script>
+async function startSearch() {
+    const area = document.getElementById("area").value.trim();
+    const keyword = document.getElementById("keyword").value.trim().toLowerCase();
 
-                    # Адрес
-                    addr = vac.get("address")
-                    address = "-"
-                    if addr:
-                        street = addr.get("street", "")
-                        building = addr.get("building", "")
-                        address = f"{street} {building}".strip() or "-"
+    const progressBar = document.getElementById("progressBar");
+    const status = document.getElementById("status");
+    const tableBody = document.querySelector("#resultsTable tbody");
+    tableBody.innerHTML = "";
 
-                    # 2GIS URL
-                    if address != "-":
-                        query = f"Алматы, {address}".replace(" ", "+")
-                        address_link = f"https://2gis.kz/almaty/search/{query}"
-                    else:
-                        address_link = "-"
+    status.textContent = "Запрашиваю данные…";
 
-                    vacancies.append({
-                        "ID": vac_id,
-                        "Название": vac.get("name", "-"),
-                        "Компания": vac.get("employer", {}).get("name", "-"),
-                        "Дата публикации": vac.get("published_at", "-")[:10],
-                        "Адрес": address,
-                        "Ссылка HH": url,
-                        "Ссылка 2GIS": address_link
-                    })
+    let page = 0;
+    const perPage = 100;
+    let totalPages = 1;
 
-                page += 1
-                current_cycle += 1
-                progress.progress(min(current_cycle / 50, 1.0))
+    const foundVacancies = [];
 
-                time.sleep(0.2)
+    while (page < totalPages) {
+        const url = `https://api.hh.ru/vacancies?area=${area}&page=${page}&per_page=${perPage}`;
 
-            except:
-                break
+        status.textContent = `Обрабатываю страницу ${page + 1}…`;
 
-    progress.progress(1.0)
+        const response = await fetch(url);
+        const data = await response.json();
 
-    st.success(f"Поиск завершен! Найдено {len(vacancies)} вакансий.")
+        totalPages = Math.min(20, data.pages); // HH ограничивает максимум 20 страниц
+        const items = data.items || [];
 
-    # ---------------------------
-    # OUTPUT TABLE
-    # ---------------------------
-    if vacancies:
-        df = pd.DataFrame(vacancies)
+        // Просмотр вакансий страницы
+        for (const v of items) {
+            const full = await fetch(v.url).then(r => r.json());
+            const text = (full.description || "").toLowerCase();
 
-        # Превращаем ссылки в HTML
-        df_display = df.copy()
-        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(
-            lambda x: f'<a href="{x}" target="_blank">🔗 Открыть HH</a>' if x != "-" else "-"
-        )
-        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(
-            lambda x: f'<a href="{x}" target="_blank">📍 2GIS</a>' if x != "-" else "-"
-        )
+            if (text.includes(keyword)) {
+                foundVacancies.push({
+                    id: v.id,
+                    name: v.name,
+                    company: v.employer ? v.employer.name : "-",
+                    date: v.published_at.split("T")[0],
+                    address: v.address ? v.address.raw : "-",
+                    hh: v.alternate_url
+                });
+            }
+        }
 
-        html_table = df_display.to_html(
-            escape=False,
-            index=False,
-            border=0,
-            classes="styled-table"
-        )
+        // Обновление прогресса
+        progressBar.style.width = (((page + 1) / totalPages) * 100) + "%";
 
-        # CSS + таблица
-        full_html = f"""
-        <style>
-            .styled-table {{
-                border-collapse: collapse;
-                width: 100%;
-                font-family: Arial, sans-serif;
-            }}
-            .styled-table thead th {{
-                background: #1f2937;
-                color: #fff;
-                padding: 8px;
-                border-bottom: 2px solid #444;
-                position: sticky;
-                top: 0;
-                z-index: 2;
-            }}
-            .styled-table tbody tr:nth-child(odd) {{
-                background: #f9f9f9;
-            }}
-            .styled-table tbody tr:hover {{
-                background: #eef6ff;
-            }}
-            .styled-table td {{
-                padding: 8px;
-                border-bottom: 1px solid #ddd;
-                vertical-align: top;
-            }}
-            a {{
-                color: #0d6efd;
-                font-weight: bold;
-                text-decoration: none;
-            }}
-            a:hover {{
-                text-decoration: underline;
-            }}
-        </style>
-        {html_table}
-        """
+        status.textContent =
+            `Страниц обработано: ${page + 1} из ${totalPages} | Найдено подходящих вакансий: ${foundVacancies.length}`;
 
-        st.html(full_html)
+        page++;
+    }
 
-        # Excel export
-        excel_buffer = io.BytesIO()
-        df.to_excel(excel_buffer, index=False)
-        excel_buffer.seek(0)
+    // Вывод результатов
+    foundVacancies.forEach(v => {
+        const row = document.createElement("tr");
 
-        st.download_button(
-            label="⬇ Скачать Excel",
-            data=excel_buffer,
-            file_name="vacancies.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        row.innerHTML = `
+            <td>${v.id}</td>
+            <td>${v.name}</td>
+            <td>${v.company}</td>
+            <td>${v.date}</td>
+            <td>${v.address}</td>
+            <td><a class="small-btn" href="${v.hh}" target="_blank">Открыть</a></td>
+            <td>${
+                v.address !== "-" 
+                ? `<a class="small-btn" target="_blank"
+                     href="https://2gis.kz/almaty/search/${encodeURIComponent(v.address)}">2GIS</a>`
+                : "-"
+            }</td>
+        `;
+
+        tableBody.appendChild(row);
+    });
+
+    status.textContent = `Готово! Найдено всего: ${foundVacancies.length}`;
+    progressBar.style.width = "100%";
+}
+</script>
+
+</body>
+</html>
