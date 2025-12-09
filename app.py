@@ -69,16 +69,21 @@ def fetch_full_description(url):
 if st.button("Запустить поиск"):
 
     st.info("Начинаю поиск…")
-    progress = st.progress(0)
-    status = st.empty()
-
     vacancies = []
     seen_ids = set()
+
     hh_api = "https://api.hh.ru/vacancies"
     per_page = 100
     area_id = 160  # Алматы
 
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    total_keywords = len(title_keywords)
+    keyword_index = 0
+
     for keyword in title_keywords:
+        keyword_index += 1
         page = 0
         while True:
             params = {"text": keyword, "area": area_id, "per_page": per_page, "page": page}
@@ -139,9 +144,11 @@ if st.button("Запустить поиск"):
                         "Ссылка 2GIS": address_link
                     })
                 page += 1
-                status.text(f"Страница {page}, найдено вакансий: {len(vacancies)}")
-                progress.progress(min(page*0.05,1.0))
-                time.sleep(0.25)
+                # Обновляем прогресс
+                progress_value = min((keyword_index - 1 + page/50)/total_keywords, 1.0)
+                progress_bar.progress(progress_value)
+                status_text.text(f"Обрабатываем ключевое слово {keyword_index}/{total_keywords}, страница {page}, вакансий найдено: {len(vacancies)}")
+                time.sleep(0.2)
             except:
                 break
 
@@ -152,11 +159,25 @@ if st.button("Запустить поиск"):
 
         # Кликабельные ссылки
         df_display = df.copy()
-        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(lambda x: f'[Открыть HH]({x})' if x != "-" else "-")
-        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(lambda x: f'[Открыть 2GIS]({x})' if x != "-" else "-")
+        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(lambda x: f'<a href="{x}" target="_blank">🔗 Открыть HH</a>' if x != "-" else "-")
+        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(lambda x: f'<a href="{x}" target="_blank">📍 2GIS</a>' if x != "-" else "-")
 
-        # Отображаем DataFrame нормально
-        st.dataframe(df_display, use_container_width=True)
+        # Отображение через markdown таблицу с HTML
+        table_html = "<table style='width:100%; border-collapse: collapse;'>"
+        # Заголовки
+        table_html += "<tr>"
+        for col in df_display.columns:
+            table_html += f"<th style='border: 1px solid #ccc; padding: 6px;'>{col}</th>"
+        table_html += "</tr>"
+        # Данные
+        for _, row in df_display.iterrows():
+            table_html += "<tr>"
+            for col in df_display.columns:
+                table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{row[col]}</td>"
+            table_html += "</tr>"
+        table_html += "</table>"
+
+        st.markdown(table_html, unsafe_allow_html=True)
 
         # Выгрузка Excel
         excel_buffer = io.BytesIO()
