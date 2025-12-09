@@ -5,8 +5,8 @@ import time
 from bs4 import BeautifulSoup
 import io
 
-st.set_page_config(page_title="HH FULL Vacancy Scraper", layout="wide")
-st.title("HH FULL Vacancy Scraper (Title + Description Parsing)")
+st.set_page_config(page_title="Поиск вакансий HH", layout="wide")
+st.title("Поиск вакансий на HeadHunter по Алматы")
 
 # ---------------------------
 # ВВОД ПАРАМЕТРОВ
