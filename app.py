@@ -242,47 +242,83 @@ if st.button("🚀 Запустить поиск"):
 
     st.write(f"Всего найдено вакансий: **{len(vacancies)}**")
 
-    # ---------------------------
-    # OUTPUT
-    # ---------------------------
-    if vacancies:
-        df = pd.DataFrame(vacancies)
+# ---------------------------
+# OUTPUT
+# ---------------------------
+if vacancies:
+    df = pd.DataFrame(vacancies)
 
-        # создаём кликабельные HTML ссылки (для отображения в таблице)
-        df_display = df.copy()
-        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(
-            lambda x: f'<a href="{x}" target="_blank">🔗 Открыть HH</a>' if x and x != "-" else "-"
-        )
-        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(
-            lambda x: f'<a href="{x}" target="_blank">📍 2GIS</a>' if x and x != "-" else "-"
-        )
+    # HTML-ссылки
+    df_display = df.copy()
+    df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(
+        lambda x: f'<a href="{x}" target="_blank">🔗 Открыть HH</a>' if x != "-" else "-"
+    )
+    df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(
+        lambda x: f'<a href="{x}" target="_blank">📍 2GIS</a>' if x != "-" else "-"
+    )
 
-        # корректная HTML-таблица со стилями (заголовок НЕ белый)
-        table_html = df_display.to_html(escape=False, index=False)
-        styled = f"""
-        <style>
-         thead th {{ background:#1f2937; color:#fff; padding:8px; position: sticky; top:0; z-index:1; }}
-         table {{ border-collapse: collapse; width:100%; font-family: Arial, sans-serif; }}
-         td, th {{ border: 1px solid #ddd; padding: 8px; text-align:left; vertical-align: top; }}
-         tbody tr:nth-child(odd){{ background:#fbfbfb; }}
-         tbody tr:hover{{ background:#eef6ff; }}
-         a {{ text-decoration:none; color: #0645AD; font-weight:600; }}
-        </style>
-        {table_html}
-        """
+    # Конвертация в HTML-таблицу ПО-СТРОЧНО
+    html_table = df_display.to_html(
+        escape=False,
+        index=False,
+        border=0,
+        classes="styled-table"
+    )
 
-        st.markdown(styled, unsafe_allow_html=True)
+    # Добавляем нормальный CSS
+    full_html = f"""
+    <style>
+        .styled-table {{
+            border-collapse: collapse;
+            width: 100%;
+            font-family: Arial, sans-serif;
+        }}
+        .styled-table thead th {{
+            background: #1f2937;
+            color: #fff;
+            padding: 8px;
+            text-align: left;
+            border-bottom: 2px solid #444;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }}
+        .styled-table tbody tr:nth-child(odd) {{
+            background: #f9f9f9;
+        }}
+        .styled-table tbody tr:hover {{
+            background: #eef6ff;
+        }}
+        .styled-table td {{
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            vertical-align: top;
+        }}
+        a {{
+            color: #0d6efd;
+            text-decoration: none;
+            font-weight: bold;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+    </style>
+    {html_table}
+    """
 
-        # Excel (чистые значения без HTML)
-        excel_buffer = io.BytesIO()
-        pd.DataFrame(vacancies).to_excel(excel_buffer, index=False)
-        excel_buffer.seek(0)
+    # ❗ ВАЖНО: используем st.html — таблица НЕ ломается
+    st.html(full_html)
 
-        st.download_button(
-            label="⬇ Скачать Excel",
-            data=excel_buffer,
-            file_name="vacancies.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("По заданным фильтрам вакансий не найдено.")
+    # Excel-файл
+    excel_buffer = io.BytesIO()
+    df.to_excel(excel_buffer, index=False)
+    excel_buffer.seek(0)
+
+    st.download_button(
+        label="⬇ Скачать Excel",
+        data=excel_buffer,
+        file_name="vacancies.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.info("По фильтрам вакансий не найдено.")
