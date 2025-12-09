@@ -174,10 +174,9 @@ async function startSearch() {
         const response = await fetch(url);
         const data = await response.json();
 
-        totalPages = Math.min(20, data.pages); // HH ограничивает максимум 20 страниц
+        totalPages = Math.min(20, data.pages);
         const items = data.items || [];
 
-        // Просмотр вакансий страницы
         for (const v of items) {
             const full = await fetch(v.url).then(r => r.json());
             const text = (full.description || "").toLowerCase();
@@ -194,16 +193,14 @@ async function startSearch() {
             }
         }
 
-        // Обновление прогресса
         progressBar.style.width = (((page + 1) / totalPages) * 100) + "%";
 
         status.textContent =
-            `Страниц обработано: ${page + 1} из ${totalPages} | Найдено подходящих вакансий: ${foundVacancies.length}`;
+            `Страниц: ${page + 1}/${totalPages} | Найдено: ${foundVacancies.length}`;
 
         page++;
     }
 
-    // Вывод результатов
     foundVacancies.forEach(v => {
         const row = document.createElement("tr");
 
