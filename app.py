@@ -141,32 +141,30 @@ if st.button("Запустить поиск"):
 
     st.success(f"Поиск завершен! Найдено {len(vacancies)} вакансий.")
 
-    if vacancies:
-        df = pd.DataFrame(vacancies)
-        # Формируем кликабельные ссылки
-        df_display = df.copy()
-        df_display["Ссылка HH"] = df_display["Ссылка HH"].apply(lambda x: f'[Открыть HH]({x})' if x != "-" else "-")
-        df_display["Ссылка 2GIS"] = df_display["Ссылка 2GIS"].apply(lambda x: f'[Открыть 2GIS]({x})' if x != "-" else "-")
-        # Вывод через markdown с HTML таблицей
-        table_html = "<table style='width:100%; border-collapse: collapse;'>"
-        table_html += "<tr>"
-        for col in df_display.columns:
-            table_html += f"<th style='border: 1px solid #ccc; padding: 6px;'>{col}</th>"
-        table_html += "</tr>"
-        for _, row in df_display.iterrows():
-            table_html += "<tr>"
-            for col in df_display.columns:
-                table_html += f"<td style='border: 1px solid #ccc; padding: 6px;'>{row[col]}</td>"
-            table_html += "</tr>"
-        table_html += "</table>"
-        st.markdown(table_html, unsafe_allow_html=True)
-        # Выгрузка Excel
-        excel_buffer = io.BytesIO()
-        df.to_excel(excel_buffer, index=False)
-        excel_buffer.seek(0)
-        st.download_button(
-            label="Скачать Excel",
-            data=excel_buffer,
-            file_name="vacancies.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+ if vacancies:
+    df = pd.DataFrame(vacancies)
+
+    # создаём HTML ссылки
+    df["Ссылка HH"] = df["Ссылка HH"].apply(
+        lambda x: f'<a href="{x}" target="_blank">Открыть HH</a>' if x != "-" else "-"
+    )
+    df["Ссылка 2GIS"] = df["Ссылка 2GIS"].apply(
+        lambda x: f'<a href="{x}" target="_blank">Открыть 2GIS</a>' if x != "-" else "-"
+    )
+
+    st.markdown(
+        df.to_html(escape=False, index=False),
+        unsafe_allow_html=True
+    )
+
+    # выгрузка excel (чистые ссылки)
+    excel_buffer = io.BytesIO()
+    pd.DataFrame(vacancies).to_excel(excel_buffer, index=False)
+    excel_buffer.seek(0)
+
+    st.download_button(
+        label="Скачать Excel",
+        data=excel_buffer,
+        file_name="vacancies.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
