@@ -141,7 +141,7 @@ if st.button("Запустить поиск"):
 
     st.success(f"Поиск завершен! Найдено {len(vacancies)} вакансий.")
 
- if vacancies:
+if vacancies:
     df = pd.DataFrame(vacancies)
 
     # создаём HTML ссылки
